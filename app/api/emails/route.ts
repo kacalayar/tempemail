@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { emails } from "@/lib/schema"
 import { encodeCursor, decodeCursor } from "@/lib/cursor"
 import { getUserId } from "@/lib/apiKey"
+import { buildEmailSearchLikePattern, normalizeEmailSearchQuery } from "@/lib/email-search"
 
 export const runtime = "edge"
 
@@ -14,14 +15,25 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const cursor = searchParams.get('cursor')
+  const query = normalizeEmailSearchQuery(searchParams.get("query"))
   
   const db = createDb()
 
   try {
-    const baseConditions = and(
+    const baseFilters = [
       eq(emails.userId, userId!),
       gt(emails.expiresAt, new Date())
-    )
+    ]
+
+    const searchPattern = buildEmailSearchLikePattern(query)
+
+    if (searchPattern) {
+      baseFilters.push(
+        sql`${emails.address} LIKE ${searchPattern} ESCAPE '\\'`
+      )
+    }
+
+    const baseConditions = and(...baseFilters)
 
     const totalResult = await db.select({ count: sql<number>`count(*)` })
       .from(emails)

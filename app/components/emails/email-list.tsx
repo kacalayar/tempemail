@@ -1,11 +1,11 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useDeferredValue, useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useTranslations } from "next-intl"
 import { CreateDialog } from "./create-dialog"
 import { ShareDialog } from "./share-dialog"
-import { Mail, RefreshCw, Trash2 } from "lucide-react"
+import { Mail, RefreshCw, Search, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useThrottle } from "@/hooks/use-throttle"
@@ -24,6 +24,8 @@ import {
 import { ROLES } from "@/lib/permissions"
 import { useUserRole } from "@/hooks/use-user-role"
 import { useConfig } from "@/hooks/use-config"
+import { Input } from "@/components/ui/input"
+import { mergeRefreshedEmails, normalizeEmailSearchQuery } from "@/lib/email-search"
 
 interface Email {
   id: string
@@ -43,6 +45,27 @@ interface EmailResponse {
   total: number
 }
 
+async function requestEmails({ cursor, query }: { cursor?: string, query?: string }) {
+  const url = new URL("/api/emails", window.location.origin)
+  const normalizedQuery = normalizeEmailSearchQuery(query)
+
+  if (cursor) {
+    url.searchParams.set("cursor", cursor)
+  }
+
+  if (normalizedQuery) {
+    url.searchParams.set("query", normalizedQuery)
+  }
+
+  const response = await fetch(url)
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch emails")
+  }
+
+  return await response.json() as EmailResponse
+}
+
 export function EmailList({ onEmailSelect, selectedEmailId }: EmailListProps) {
   const { data: session } = useSession()
   const { config } = useConfig()
@@ -56,69 +79,88 @@ export function EmailList({ onEmailSelect, selectedEmailId }: EmailListProps) {
   const [loadingMore, setLoadingMore] = useState(false)
   const [total, setTotal] = useState(0)
   const [emailToDelete, setEmailToDelete] = useState<Email | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
   const { toast } = useToast()
+  const deferredSearchQuery = useDeferredValue(searchQuery)
+  const activeSearchQuery = normalizeEmailSearchQuery(deferredSearchQuery)
+  const hasSearchQuery = normalizeEmailSearchQuery(searchQuery).length > 0
+  const lastLoadedQueryRef = useRef(activeSearchQuery)
 
-  const fetchEmails = async (cursor?: string) => {
+  const handleRefresh = async () => {
+    setRefreshing(true)
+
     try {
-      const url = new URL("/api/emails", window.location.origin)
-      if (cursor) {
-        url.searchParams.set('cursor', cursor)
-      }
-      const response = await fetch(url)
-      const data = await response.json() as EmailResponse
-      
-      if (!cursor) {
-        const newEmails = data.emails
-        const oldEmails = emails
-
-        const lastDuplicateIndex = newEmails.findIndex(
-          newEmail => oldEmails.some(oldEmail => oldEmail.id === newEmail.id)
-        )
-
-        if (lastDuplicateIndex === -1) {
-          setEmails(newEmails)
-          setNextCursor(data.nextCursor)
-          setTotal(data.total)
-          return
-        }
-        const uniqueNewEmails = newEmails.slice(0, lastDuplicateIndex)
-        setEmails([...uniqueNewEmails, ...oldEmails])
-        setTotal(data.total)
-        return
-      }
-      setEmails(prev => [...prev, ...data.emails])
+      const data = await requestEmails({ query: activeSearchQuery })
+      setEmails(prev => mergeRefreshedEmails(data.emails, prev))
       setNextCursor(data.nextCursor)
       setTotal(data.total)
     } catch (error) {
       console.error("Failed to fetch emails:", error)
     } finally {
-      setLoading(false)
+      lastLoadedQueryRef.current = activeSearchQuery
       setRefreshing(false)
-      setLoadingMore(false)
     }
   }
 
-  const handleRefresh = async () => {
-    setRefreshing(true)
-    await fetchEmails()
-  }
-
   const handleScroll = useThrottle((e: React.UIEvent<HTMLDivElement>) => {
-    if (loadingMore) return
+    if (loading || loadingMore || !nextCursor) return
 
     const { scrollHeight, scrollTop, clientHeight } = e.currentTarget
     const threshold = clientHeight * 1.5
     const remainingScroll = scrollHeight - scrollTop
 
-    if (remainingScroll <= threshold && nextCursor) {
+    if (remainingScroll <= threshold) {
       setLoadingMore(true)
-      fetchEmails(nextCursor)
+      requestEmails({ cursor: nextCursor, query: activeSearchQuery })
+        .then((data) => {
+          setEmails(prev => [...prev, ...data.emails])
+          setNextCursor(data.nextCursor)
+          setTotal(data.total)
+        })
+        .catch((error) => {
+          console.error("Failed to fetch emails:", error)
+        })
+        .finally(() => {
+          setLoadingMore(false)
+        })
     }
   }, 200)
 
   useEffect(() => {
-    if (session) fetchEmails()
-  }, [session])
+    if (!session) return
+
+    let cancelled = false
+    setLoading(true)
+    setLoadingMore(false)
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const data = await requestEmails({ query: activeSearchQuery })
+
+        if (cancelled) return
+
+        const shouldMergeResults = activeSearchQuery === lastLoadedQueryRef.current
+
+        setEmails(prev => shouldMergeResults ? mergeRefreshedEmails(data.emails, prev) : data.emails)
+        setNextCursor(data.nextCursor)
+        setTotal(data.total)
+        lastLoadedQueryRef.current = activeSearchQuery
+      } catch (error) {
+        if (cancelled) return
+        console.error("Failed to fetch emails:", error)
+      } finally {
+        if (cancelled) return
+        setLoading(false)
+        setRefreshing(false)
+        setLoadingMore(false)
+      }
+    }, activeSearchQuery ? 250 : 0)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [session, activeSearchQuery])
 
   const handleDelete = async (email: Email) => {
     try {
@@ -163,26 +205,39 @@ export function EmailList({ onEmailSelect, selectedEmailId }: EmailListProps) {
   return (
     <>
       <div className="flex flex-col h-full">
-        <div className="p-2 flex justify-between items-center border-b border-primary/20">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className={cn("h-8 w-8", refreshing && "animate-spin")}
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-            <span className="text-xs text-gray-500">
-              {role === ROLES.EMPEROR ? (
-                t("emailCountUnlimited", { count: total })
-              ) : (
-                t("emailCount", { count: total, max: config?.maxEmails || EMAIL_CONFIG.MAX_ACTIVE_EMAILS })
-              )}
-            </span>
+        <div className="border-b border-primary/20 p-2 space-y-2">
+          <div className="flex justify-between items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className={cn("h-8 w-8 shrink-0", refreshing && "animate-spin")}
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+              <span className="text-xs text-gray-500 truncate">
+                {role === ROLES.EMPEROR ? (
+                  t("emailCountUnlimited", { count: total })
+                ) : (
+                  t("emailCount", { count: total, max: config?.maxEmails || EMAIL_CONFIG.MAX_ACTIVE_EMAILS })
+                )}
+              </span>
+            </div>
+            <CreateDialog onEmailCreated={handleRefresh} />
           </div>
-          <CreateDialog onEmailCreated={handleRefresh} />
+
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t("searchPlaceholder")}
+              aria-label={t("searchPlaceholder")}
+              className="h-8 pl-9"
+            />
+          </div>
         </div>
         
         <div className="flex-1 overflow-auto p-2" onScroll={handleScroll}>
@@ -234,7 +289,7 @@ export function EmailList({ onEmailSelect, selectedEmailId }: EmailListProps) {
             </div>
           ) : (
             <div className="text-center text-sm text-gray-500">
-              {t("noEmails")}
+              {hasSearchQuery ? t("noSearchResults") : t("noEmails")}
             </div>
           )}
         </div>
