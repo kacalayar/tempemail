@@ -81,11 +81,18 @@ export function EmailList({ onEmailSelect, selectedEmailId }: EmailListProps) {
   const [total, setTotal] = useState(0)
   const [emailToDelete, setEmailToDelete] = useState<Email | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [hasLoadedSession, setHasLoadedSession] = useState(false)
   const { toast } = useToast()
   const deferredSearchQuery = useDeferredValue(searchQuery)
   const activeSearchQuery = normalizeEmailSearchQuery(deferredSearchQuery)
   const hasSearchQuery = normalizeEmailSearchQuery(searchQuery).length > 0
   const lastLoadedQueryRef = useRef(activeSearchQuery)
+
+  useEffect(() => {
+    if (sessionUserId) {
+      setHasLoadedSession(true)
+    }
+  }, [sessionUserId])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -128,7 +135,7 @@ export function EmailList({ onEmailSelect, selectedEmailId }: EmailListProps) {
   }, 200)
 
   useEffect(() => {
-    if (!sessionUserId) return
+    if (!hasLoadedSession) return
 
     let cancelled = false
     setLoading(true)
@@ -161,7 +168,7 @@ export function EmailList({ onEmailSelect, selectedEmailId }: EmailListProps) {
       cancelled = true
       window.clearTimeout(timeoutId)
     }
-  }, [sessionUserId, activeSearchQuery])
+  }, [hasLoadedSession, activeSearchQuery])
 
   const handleDelete = async (email: Email) => {
     try {
@@ -201,7 +208,7 @@ export function EmailList({ onEmailSelect, selectedEmailId }: EmailListProps) {
     }
   }
 
-  if (!session) return null
+  if (!hasLoadedSession) return null
 
   return (
     <>
