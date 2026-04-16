@@ -68,6 +68,7 @@ async function requestEmails({ cursor, query }: { cursor?: string, query?: strin
 
 export function EmailList({ onEmailSelect, selectedEmailId }: EmailListProps) {
   const { data: session } = useSession()
+  const sessionUserId = session?.user?.id ?? null
   const { config } = useConfig()
   const { role } = useUserRole()
   const t = useTranslations("emails.list")
@@ -127,7 +128,7 @@ export function EmailList({ onEmailSelect, selectedEmailId }: EmailListProps) {
   }, 200)
 
   useEffect(() => {
-    if (!session) return
+    if (!sessionUserId) return
 
     let cancelled = false
     setLoading(true)
@@ -160,7 +161,7 @@ export function EmailList({ onEmailSelect, selectedEmailId }: EmailListProps) {
       cancelled = true
       window.clearTimeout(timeoutId)
     }
-  }, [session, activeSearchQuery])
+  }, [sessionUserId, activeSearchQuery])
 
   const handleDelete = async (email: Email) => {
     try {
