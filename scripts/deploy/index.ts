@@ -336,9 +336,9 @@ const pushPagesSecret = () => {
 
     console.log(`📝 Found ${Object.keys(secrets).length} secrets to push:`, Object.keys(secrets).join(', '));
 
-    // 使用临时文件推送secrets
-    execSync(`pnpm dlx wrangler pages secret bulk ${runtimeEnvFile}`, { 
-      stdio: "inherit" 
+    // 使用临时文件推送secrets (use pinned wrangler@3.x; latest 4.x requires Node 22)
+    execSync(`npx wrangler pages secret bulk ${runtimeEnvFile}`, {
+      stdio: "inherit"
     });
 
     // 清理临时文件
