@@ -116,7 +116,12 @@
     "deleteFailed": "刪除失敗",
     "createSuccess": "分享連結建立成功",
     "createFailed": "建立分享連結失敗",
-    "shareButton": "分享"
+    "shareButton": "分享",
+    "publicAccess": "依地址公開存取",
+    "publicDescription": "任何知道收件匣網址的人都能閱讀收到的郵件，無需登入。",
+    "publicLink": "收件匣網址",
+    "enableFailed": "切換公開存取失敗",
+    "linkCopied": "收件匣網址已複製"
   },
   "shareMessage": {
     "title": "分享郵件",

@@ -116,7 +116,12 @@
     "deleteFailed": "删除失败",
     "createSuccess": "分享链接创建成功",
     "createFailed": "创建分享链接失败",
-    "shareButton": "分享"
+    "shareButton": "分享",
+    "publicAccess": "按地址公开访问",
+    "publicDescription": "任何知道收件箱网址的人都可以阅读收到的邮件，无需登录。",
+    "publicLink": "收件箱网址",
+    "enableFailed": "切换公开访问失败",
+    "linkCopied": "收件箱网址已复制"
   },
   "shareMessage": {
     "title": "分享邮件",

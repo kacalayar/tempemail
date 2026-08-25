@@ -1,19 +1,22 @@
-import { getSharedEmail, getSharedEmailMessages } from "@/lib/shared-data"
+import { getPublicEmail, getPublicEmailMessages } from "@/lib/shared-data"
 import { SharedErrorPage } from "@/components/emails/shared-error-page"
-import { SharedEmailPageClient } from "./page-client"
+import { SharedEmailPageClient } from "@/components/emails/public-inbox-client"
 
 interface PageProps {
   params: Promise<{
-    token: string
+    email: string
     locale: string
   }>
 }
 
-export default async function SharedEmailPage({ params }: PageProps) {
-  const { token } = await params
+export const runtime = "edge"
 
-  // 服务端获取数据
-  const email = await getSharedEmail(token)
+export default async function PublicInboxPage({ params }: PageProps) {
+  const { email: rawEmail } = await params
+  const address = decodeURIComponent(rawEmail)
+
+  // Server-side fetch + authorization gate (isPublic + expiry).
+  const email = await getPublicEmail(address)
 
   if (!email) {
     return (
@@ -27,8 +30,7 @@ export default async function SharedEmailPage({ params }: PageProps) {
     )
   }
 
-  // 获取初始消息列表
-  const messagesResult = await getSharedEmailMessages(token)
+  const messagesResult = await getPublicEmailMessages(address)
 
   return (
     <SharedEmailPageClient
@@ -36,7 +38,7 @@ export default async function SharedEmailPage({ params }: PageProps) {
       initialMessages={messagesResult.messages}
       initialNextCursor={messagesResult.nextCursor}
       initialTotal={messagesResult.total}
-      fetchBase={`/api/shared/${token}`}
+      fetchBase={`/api/public/${encodeURIComponent(address)}`}
     />
   )
 }

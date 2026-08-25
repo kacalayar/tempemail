@@ -47,6 +47,7 @@ export const emails = sqliteTable("email", {
     .notNull()
     .$defaultFn(() => new Date()),
   expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  isPublic: integer("is_public", { mode: "boolean" }).notNull().default(false),
 }, (table) => ({
   expiresAtIdx: index("email_expires_at_idx").on(table.expiresAt),
   userIdIdx: index("email_user_id_idx").on(table.userId),

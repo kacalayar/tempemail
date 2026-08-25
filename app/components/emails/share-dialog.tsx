@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
 import { useCopy } from "@/hooks/use-copy"
+import { Switch } from "@/components/ui/switch"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,7 +49,7 @@ interface ShareLink {
   enabled: boolean
 }
 
-export function ShareDialog({ emailId }: ShareDialogProps) {
+export function ShareDialog({ emailId, emailAddress }: ShareDialogProps) {
   const t = useTranslations("emails.share")
   const { toast } = useToast()
   const { copyToClipboard } = useCopy()
@@ -59,6 +60,44 @@ export function ShareDialog({ emailId }: ShareDialogProps) {
   const [creating, setCreating] = useState(false)
   const [expiryTime, setExpiryTime] = useState(EXPIRY_OPTIONS[1].value.toString())
   const [deleteTarget, setDeleteTarget] = useState<ShareLink | null>(null)
+  const [isPublic, setIsPublic] = useState(false)
+  const [toggling, setToggling] = useState(false)
+
+  const fetchPublic = async () => {
+    try {
+      const res = await fetch(`/api/emails/${emailId}/public`)
+      if (res.ok) {
+        const data = await res.json() as { isPublic: boolean }
+        setIsPublic(data.isPublic)
+      }
+    } catch {
+      // best-effort; defaults to off
+    }
+  }
+
+  const togglePublic = async (next: boolean) => {
+    try {
+      setToggling(true)
+      const res = await fetch(`/api/emails/${emailId}/public`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPublic: next })
+      })
+      if (!res.ok) throw new Error("Failed")
+      setIsPublic(next)
+    } catch {
+      toast({ title: t("enableFailed"), variant: "destructive" })
+    } finally {
+      setToggling(false)
+    }
+  }
+
+  const publicInboxUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/inbox/${encodeURIComponent(emailAddress)}`
+
+  const handleCopyPublic = async () => {
+    const success = await copyToClipboard(publicInboxUrl)
+    toast({ title: success ? t("linkCopied") : t("copyFailed"), variant: success ? "default" : "destructive" })
+  }
 
   const fetchShares = async () => {
     try {
@@ -157,6 +196,7 @@ export function ShareDialog({ emailId }: ShareDialogProps) {
   useEffect(() => {
     if (open) {
       fetchShares()
+      fetchPublic()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -186,6 +226,35 @@ export function ShareDialog({ emailId }: ShareDialogProps) {
           </DialogHeader>
 
           <div className="space-y-4">
+            {/* Public access by address */}
+            <div className="space-y-2 p-3 border rounded-lg">
+              <div className="flex items-center justify-between gap-2">
+                <Label>{t("publicAccess")}</Label>
+                <Switch
+                  checked={isPublic}
+                  disabled={toggling}
+                  onCheckedChange={togglePublic}
+                />
+              </div>
+              <p className="text-xs text-gray-500">{t("publicDescription")}</p>
+              {isPublic && (
+                <div className="flex items-center gap-2 mt-1">
+                  <Link2 className="h-4 w-4 flex-shrink-0 text-primary/60" />
+                  <span className="flex-1 text-xs p-1 rounded font-mono bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 break-all">
+                    {publicInboxUrl}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 flex-shrink-0"
+                    onClick={handleCopyPublic}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+
             {/* Create new share link */}
             <div className="space-y-2">
               <Label>{t("expiryTime")}</Label>

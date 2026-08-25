@@ -116,7 +116,12 @@
     "deleteFailed": "削除に失敗しました",
     "createSuccess": "共有リンクを作成しました",
     "createFailed": "共有リンクの作成に失敗しました",
-    "shareButton": "共有"
+    "shareButton": "共有",
+    "publicAccess": "アドレスによる公開アクセス",
+    "publicDescription": "受信箱の URL を知っていれば、誰でも受信メールを閲覧できます。ログイン不要です。",
+    "publicLink": "受信箱 URL",
+    "enableFailed": "公開アクセスの切り替えに失敗しました",
+    "linkCopied": "受信箱 URL をコピーしました"
   },
   "shareMessage": {
     "title": "メールを共有",

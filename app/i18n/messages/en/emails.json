@@ -116,7 +116,12 @@
     "deleteFailed": "Failed to delete",
     "createSuccess": "Share link created successfully",
     "createFailed": "Failed to create share link",
-    "shareButton": "Share"
+    "shareButton": "Share",
+    "publicAccess": "Public access by address",
+    "publicDescription": "Anyone with the inbox URL can read received emails, no login needed.",
+    "publicLink": "Inbox URL",
+    "enableFailed": "Failed to toggle public access",
+    "linkCopied": "Inbox URL copied"
   },
   "shareMessage": {
     "title": "Share Message",

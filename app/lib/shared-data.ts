@@ -1,6 +1,13 @@
 import { createDb } from "@/lib/db"
 import { emailShares, messageShares, messages, emails } from "@/lib/schema"
-import { eq, desc, and, or, ne, isNull } from "drizzle-orm"
+import { eq, desc, and, or, ne, isNull, sql } from "drizzle-orm"
+
+// Trust-boundary input check: an address must be a real email shape before
+// it touches the DB. Anything else is rejected (returns null/empty).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+export function isValidAddress(address: string): boolean {
+  return typeof address === "string" && address.length <= 320 && EMAIL_RE.test(address)
+}
 
 export interface SharedEmail {
   id: string
@@ -188,5 +195,94 @@ export async function getSharedMessage(token: string): Promise<SharedMessage | n
   } catch (error) {
     console.error("Failed to fetch shared message:", error)
     return null
+  }
+}
+
+// Resolve an email by address for public (no-login) inbox access.
+// Returns null unless the email is explicitly opted-in (isPublic) and not expired.
+export async function getPublicEmail(address: string): Promise<SharedEmail | null> {
+  if (!isValidAddress(address)) return null
+  const db = createDb()
+
+  try {
+    const email = await db.query.emails.findFirst({
+      where: sql`LOWER(${emails.address}) = LOWER(${address})`
+    })
+
+    if (!email) return null
+    // Server-side authorization gate — never trust client.
+    if (!email.isPublic) return null
+    if (email.expiresAt < new Date()) return null
+
+    return {
+      id: email.id,
+      address: email.address,
+      createdAt: email.createdAt,
+      expiresAt: email.expiresAt
+    }
+  } catch (error) {
+    console.error("Failed to fetch public email:", error)
+    return null
+  }
+}
+
+export async function getPublicEmailMessages(address: string, limit = 20): Promise<SharedMessagesResult> {
+  if (!isValidAddress(address)) return { messages: [], nextCursor: null, total: 0 }
+  const db = createDb()
+
+  try {
+    const email = await db.query.emails.findFirst({
+      where: sql`LOWER(${emails.address}) = LOWER(${address})`
+    })
+
+    if (!email || !email.isPublic || email.expiresAt < new Date()) {
+      return { messages: [], nextCursor: null, total: 0 }
+    }
+
+    // Only received messages, same as the share-token inbox.
+    const baseConditions = and(
+      eq(messages.emailId, email.id),
+      or(
+        ne(messages.type, "sent"),
+        isNull(messages.type)
+      )
+    )
+
+    const totalResult = await db.select({ count: sql<number>`count(*)` })
+      .from(messages)
+      .where(baseConditions)
+    const totalCount = Number(totalResult[0].count)
+
+    const messageList = await db.query.messages.findMany({
+      where: baseConditions,
+      orderBy: [desc(messages.receivedAt), desc(messages.id)],
+      limit: limit + 1
+    })
+
+    const hasMore = messageList.length > limit
+    const results = hasMore ? messageList.slice(0, limit) : messageList
+
+    let nextCursor: string | null = null
+    if (hasMore) {
+      const { encodeCursor } = await import("@/lib/cursor")
+      const lastMessage = results[results.length - 1]
+      nextCursor = encodeCursor(lastMessage.receivedAt.getTime(), lastMessage.id)
+    }
+
+    return {
+      messages: results.map(msg => ({
+        id: msg.id,
+        from_address: msg.fromAddress ?? undefined,
+        to_address: msg.toAddress ?? undefined,
+        subject: msg.subject,
+        received_at: msg.receivedAt,
+        sent_at: msg.sentAt
+      })),
+      nextCursor,
+      total: totalCount
+    }
+  } catch (error) {
+    console.error("Failed to fetch public email messages:", error)
+    return { messages: [], nextCursor: null, total: 0 }
   }
 }

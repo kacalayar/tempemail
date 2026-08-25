@@ -23,6 +23,11 @@ export async function middleware(request: Request) {
       return NextResponse.next()
     }
 
+    // Public inbox by email address — no auth, no API key.
+    if (pathname.startsWith('/api/public')) {
+      return NextResponse.next()
+    }
+
     request.headers.delete("X-User-Id")
     const apiKey = request.headers.get("X-API-Key")
     if (apiKey) {

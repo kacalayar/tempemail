@@ -34,7 +34,7 @@ interface SharedEmailPageClientProps {
   initialMessages: Message[]
   initialNextCursor: string | null
   initialTotal: number
-  token: string
+  fetchBase: string
 }
 
 export function SharedEmailPageClient({
@@ -42,7 +42,7 @@ export function SharedEmailPageClient({
   initialMessages,
   initialNextCursor,
   initialTotal,
-  token
+  fetchBase
 }: SharedEmailPageClientProps) {
   const t = useTranslations("emails")
   const tShared = useTranslations("emails.shared")
@@ -68,7 +68,7 @@ export function SharedEmailPageClient({
         setLoadingMore(true)
       }
 
-      const url = new URL(`/api/shared/${token}/messages`, window.location.origin)
+      const url = new URL(`${fetchBase}/messages`, window.location.origin)
       if (cursor) {
         url.searchParams.set('cursor', cursor)
       }
@@ -145,7 +145,7 @@ export function SharedEmailPageClient({
       stopPolling()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token])
+  }, [fetchBase])
 
   const handleLoadMore = () => {
     if (nextCursor && !loadingMore) {
@@ -157,7 +157,7 @@ export function SharedEmailPageClient({
     try {
       setMessageLoading(true)
 
-      const response = await fetch(`/api/shared/${token}/messages/${messageId}`)
+      const response = await fetch(`${fetchBase}/messages/${messageId}`)
 
       if (!response.ok) {
         throw new Error("Failed to load message")

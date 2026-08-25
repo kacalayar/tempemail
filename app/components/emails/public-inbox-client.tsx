@@ -1,0 +1,1 @@
+export { SharedEmailPageClient } from "@/[locale]/shared/[token]/page-client"
